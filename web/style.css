@@ -1,0 +1,173 @@
+:root {
+  font-family:
+    Inter,
+    Segoe UI,
+    sans-serif;
+  color: #e7edf8;
+  background: #0c1322;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 24px 5%;
+  border-bottom: 1px solid #26334b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+header span {
+  color: #8eabc6;
+  font-size: 13px;
+}
+main {
+  max-width: 1400px;
+  margin: auto;
+  padding: 48px 5%;
+}
+h1 {
+  font-size: 44px;
+  letter-spacing: -1.5px;
+  margin: 10px 0;
+}
+p {
+  color: #a7b8ce;
+  line-height: 1.7;
+}
+.eyebrow {
+  color: #57d6bc;
+  letter-spacing: 2px;
+  font-size: 12px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+  margin-top: 30px;
+}
+.panel {
+  background: #121e31;
+  border: 1px solid #293b55;
+  border-radius: 16px;
+  padding: 24px;
+}
+textarea {
+  width: 100%;
+  height: 270px;
+  resize: vertical;
+  background: #0b1526;
+  border: 1px solid #344965;
+  border-radius: 8px;
+  padding: 14px;
+  font:
+    14px/1.6 Consolas,
+    monospace;
+  color: #d5e5f6;
+}
+label {
+  display: block;
+  font-size: 13px;
+  margin: 14px 0 8px;
+}
+button,
+select,
+input {
+  border: 1px solid #3e5673;
+  border-radius: 8px;
+  padding: 11px;
+  background: #233751;
+  color: white;
+}
+button {
+  cursor: pointer;
+}
+button.primary {
+  background: #57d6bc;
+  color: #09221c;
+  font-weight: 700;
+  border: 0;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+svg {
+  width: 100%;
+  height: 350px;
+  background: #0c1729;
+  border-radius: 10px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+td,
+th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #2b3d55;
+}
+th {
+  color: #96aec9;
+}
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.metric {
+  padding: 16px;
+  background: #1c3047;
+  border-radius: 10px;
+  min-width: 130px;
+}
+.metric strong {
+  display: block;
+  font-size: 26px;
+  color: #61dfc8;
+}
+.metric span {
+  font-size: 12px;
+  color: #a9bdd4;
+}
+#error {
+  color: #ffb2a5;
+  min-height: 24px;
+}
+#steps {
+  line-height: 1.8;
+  color: #b8c9dc;
+}
+a {
+  color: #75dcca;
+}
+footer {
+  margin-top: 24px;
+  color: #8a9fb9;
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  h1 {
+    font-size: 34px;
+  }
+  header span {
+    display: none;
+  }
+}
+.panel {
+  min-width: 0;
+}
+#result {
+  overflow-x: auto;
+}

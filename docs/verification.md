@@ -1,0 +1,1 @@
+Verified locally on 2026-10-06: npm test algorithm suite; headless Microsoft Edge desktop 1440px and mobile 390px; example rendering, invalid-input errors, reset, JSON download, and no JavaScript errors. CPU comparison and Banker request controls checked. Screenshots visually inspected. Legacy C++/PyQt sources were preserved and were not revalidated.
