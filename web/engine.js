@@ -1,12 +1,334 @@
-(function(root){
-'use strict';
-const finite=x=>typeof x==='number'&&Number.isFinite(x);
-function rows(text,n){if(/,\s*,|^\s*,|,\s*$/m.test(text))throw Error('Each coordinate or process field needs a number.');let r=text.trim().split(/\n/).map(l=>l.trim().split(/[ ,]+/).map(Number));if(!text.trim()||r.length>100||r.some(v=>v.length!==n||v.some(x=>!finite(x)||Math.abs(x)>1000000)))throw Error(`Enter 1–100 rows with ${n} finite numbers each (absolute value ≤1000000).`);return r;}
-function rectangles(text){const r=rows(text,4);if(r.some(v=>v[2]<=0||v[3]<=0))throw Error('Width and height must be positive.');const overlap=(a,b)=>a[0]<b[0]+b[2]&&b[0]<a[0]+a[2]&&a[1]<b[1]+b[3]&&b[1]<a[1]+a[3];let edges=r.map(a=>r.map(b=>a!==b&&overlap(a,b))),colors=r.map(()=>-1),order=[];while(order.length<r.length){let ids=r.map((_,i)=>i).filter(i=>colors[i]<0);ids.sort((a,b)=>new Set(edges[b].map((e,j)=>e?colors[j]:-1).filter(c=>c>=0)).size-new Set(edges[a].map((e,j)=>e?colors[j]:-1).filter(c=>c>=0)).size||edges[b].filter(Boolean).length-edges[a].filter(Boolean).length||a-b);let i=ids[0],used=new Set(edges[i].map((e,j)=>e?colors[j]:-1));let c=0;while(used.has(c))c++;colors[i]=c;order.push(i);}return {rectangles:r,colors,groups:Math.max(...colors)+1,overlaps:edges.flat().filter(Boolean).length/2,order};}
-function schedule(text,policy,q){let p=rows(text,3).map((v,i)=>({id:i,arrival:v[0],burst:v[1],priority:v[2],remaining:v[1]}));if(p.some(x=>!Number.isInteger(x.arrival)||x.arrival<0||!Number.isInteger(x.burst)||x.burst<1||x.burst>10000)||p.reduce((s,x)=>s+x.burst,0)>100000||p.some(x=>x.arrival>100000))throw Error('Arrival must be an integer 0–100000; burst 1–10000; total burst ≤100000.');if(!['FCFS','SJF','SRTF','Priority','Round Robin'].includes(policy))throw Error('Unknown policy.');if(!Number.isInteger(q)||q<1)throw Error('Quantum must be a positive integer.');let time=0,done=0,timeline=[],queue=[],seen=new Set();const append=(id,start,end)=>{let last=timeline.at(-1);if(last&&last.id===id&&last.end===start)last.end=end;else timeline.push({id,start,end});};const arrivals=()=>p.filter(x=>x.arrival<=time&&!seen.has(x.id)).sort((a,b)=>a.arrival-b.arrival||a.id-b.id).forEach(x=>{seen.add(x.id);queue.push(x);});while(done<p.length){let ready=p.filter(x=>x.arrival<=time&&x.remaining>0);if(!ready.length){let next=Math.min(...p.filter(x=>x.remaining>0).map(x=>x.arrival));append(-1,time,next);time=next;continue;}let x;if(policy==='Round Robin'){arrivals();x=queue.shift();}else{x=ready.sort((a,b)=>policy==='FCFS'?a.arrival-b.arrival||a.id-b.id:policy==='Priority'?a.priority-b.priority||a.arrival-b.arrival||a.id-b.id:(policy==='SRTF'?a.remaining-b.remaining:a.burst-b.burst)||a.arrival-b.arrival||a.id-b.id)[0];}if(x.start===undefined)x.start=time;let duration=policy==='SRTF'?1:policy==='Round Robin'?Math.min(q,x.remaining):x.remaining;append(x.id,time,time+duration);time+=duration;x.remaining-=duration;if(policy==='Round Robin'){arrivals();if(x.remaining)queue.push(x);}if(!x.remaining){x.completion=time;done++;}}p.forEach(x=>{x.turnaround=x.completion-x.arrival;x.waiting=x.turnaround-x.burst;x.response=x.start-x.arrival;});return {processes:p,timeline,averageWaiting:p.reduce((s,x)=>s+x.waiting,0)/p.length,averageTurnaround:p.reduce((s,x)=>s+x.turnaround,0)/p.length,utilization:100*p.reduce((s,x)=>s+x.burst,0)/time};}
-function banker(text){let d=JSON.parse(text),{available:a,allocation:l,maximum:m}=d;const valid=v=>Array.isArray(v)&&v.length>0&&v.every(x=>Number.isSafeInteger(x)&&x>=0&&x<=1000000);if(!valid(a)||a.length>20||!Array.isArray(l)||!Array.isArray(m)||l.length!==m.length||!l.length||l.length>100||l.some((v,i)=>!valid(v)||!valid(m[i])||v.length!==a.length||m[i].length!==a.length||v.some((x,j)=>x>m[i][j])))throw Error('Provide available and matching allocation/maximum matrices with nonnegative integers; allocation cannot exceed maximum.');let need=m.map((v,i)=>v.map((x,j)=>x-l[i][j])),work=[...a],sequence=[],steps=[],finished=new Set();while(true){let i=need.findIndex((v,i)=>!finished.has(i)&&v.every((x,j)=>x<=work[j]));if(i<0)break;let before=[...work];work=work.map((x,j)=>x+l[i][j]);finished.add(i);sequence.push(i);steps.push({process:i,before,after:[...work]});}return {available:a,allocation:l,maximum:m,need,sequence,steps,safe:sequence.length===l.length,blocked:need.map((_,i)=>i).filter(i=>!finished.has(i))};}
-function polygons(text,point){let p=JSON.parse(text),probe=point.split(',').map(Number);if(probe.length!==2||!probe.every(finite))throw Error('Probe requires two finite coordinates.');if(!Array.isArray(p)||!p.length||p.length>50||p.some(v=>!Array.isArray(v)||v.length<3||v.length>200||v.some(t=>!Array.isArray(t)||t.length!==2||!t.every(finite))))throw Error('Enter up to 50 polygons, with 3–200 finite [x,y] vertices.');const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);const on=(a,b,c)=>Math.abs(cross(a,b,c))<1e-9&&c[0]>=Math.min(a[0],b[0])-1e-9&&c[0]<=Math.max(a[0],b[0])+1e-9&&c[1]>=Math.min(a[1],b[1])-1e-9&&c[1]<=Math.max(a[1],b[1])+1e-9;const intersects=(a,b,c,d)=>on(a,b,c)||on(a,b,d)||on(c,d,a)||on(c,d,b)||cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0;let results=p.map(v=>{for(let i=0;i<v.length;i++)for(let j=i+1;j<v.length;j++){if(j===i+1||i===0&&j===v.length-1)continue;if(intersects(v[i],v[(i+1)%v.length],v[j],v[(j+1)%v.length]))throw Error('Self-intersecting polygons are unsupported; arrange vertices around the boundary.');}let signed=0,perimeter=0,inside=false,boundary=false;v.forEach((a,i)=>{let b=v[(i+1)%v.length];signed+=a[0]*b[1]-b[0]*a[1];perimeter+=Math.hypot(a[0]-b[0],a[1]-b[1]);if(on(a,b,probe))boundary=true;if((a[1]>probe[1])!==(b[1]>probe[1])&&probe[0]<(b[0]-a[0])*(probe[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;});if(Math.abs(signed)<1e-9)throw Error('Polygon area must be positive.');return {vertices:v.length,area:Math.abs(signed)/2,perimeter,winding:signed>0?'Counterclockwise':'Clockwise',probe:boundary?'Boundary':inside?'Inside':'Outside'};});return {polygons:p,results,point:probe};}
-function request(text,process,vector){let state=banker(text),v=vector.split(/[ ,]+/).map(Number);if(!Number.isInteger(process)||process<0||process>=state.need.length||v.length!==state.available.length||v.some(x=>!Number.isSafeInteger(x)||x<0))throw Error('Request needs a valid process index and one nonnegative integer per resource.');if(v.some((x,j)=>x>state.need[process][j]))throw Error('Request exceeds the declared remaining need.');if(v.some((x,j)=>x>state.available[j]))return {granted:false,reason:'Insufficient available resources. The process must wait.'};let trial=JSON.parse(text);trial.available=trial.available.map((x,j)=>x-v[j]);trial.allocation[process]=trial.allocation[process].map((x,j)=>x+v[j]);let result=banker(JSON.stringify(trial));return {granted:result.safe,reason:result.safe?'Request can be granted safely.':'Request would create an unsafe state; allocation remains unchanged.',result};}
-const api={rectangles,schedule,banker,polygons,request};if(typeof module!=='undefined')module.exports=api;else root.Engine=api;
+(function (root) {
+  "use strict";
+  const finite = (x) => typeof x === "number" && Number.isFinite(x);
+  function rows(text, n) {
+    if (/,\s*,|^\s*,|,\s*$/m.test(text))
+      throw Error("Each coordinate or process field needs a number.");
+    let r = text
+      .trim()
+      .split(/\n/)
+      .map((l) => l.trim().split(/[ ,]+/).map(Number));
+    if (
+      !text.trim() ||
+      r.length > 100 ||
+      r.some(
+        (v) =>
+          v.length !== n || v.some((x) => !finite(x) || Math.abs(x) > 1000000),
+      )
+    )
+      throw Error(
+        `Enter 1–100 rows with ${n} finite numbers each (absolute value ≤1000000).`,
+      );
+    return r;
+  }
+  function rectangles(text) {
+    const r = rows(text, 4);
+    if (r.some((v) => v[2] <= 0 || v[3] <= 0))
+      throw Error("Width and height must be positive.");
+    const overlap = (a, b) =>
+      a[0] < b[0] + b[2] &&
+      b[0] < a[0] + a[2] &&
+      a[1] < b[1] + b[3] &&
+      b[1] < a[1] + a[3];
+    let edges = r.map((a) => r.map((b) => a !== b && overlap(a, b))),
+      colors = r.map(() => -1),
+      order = [];
+    while (order.length < r.length) {
+      let ids = r.map((_, i) => i).filter((i) => colors[i] < 0);
+      ids.sort(
+        (a, b) =>
+          new Set(
+            edges[b].map((e, j) => (e ? colors[j] : -1)).filter((c) => c >= 0),
+          ).size -
+            new Set(
+              edges[a]
+                .map((e, j) => (e ? colors[j] : -1))
+                .filter((c) => c >= 0),
+            ).size ||
+          edges[b].filter(Boolean).length - edges[a].filter(Boolean).length ||
+          a - b,
+      );
+      let i = ids[0],
+        used = new Set(edges[i].map((e, j) => (e ? colors[j] : -1)));
+      let c = 0;
+      while (used.has(c)) c++;
+      colors[i] = c;
+      order.push(i);
+    }
+    return {
+      rectangles: r,
+      colors,
+      groups: Math.max(...colors) + 1,
+      overlaps: edges.flat().filter(Boolean).length / 2,
+      order,
+    };
+  }
+  function schedule(text, policy, q) {
+    let p = rows(text, 3).map((v, i) => ({
+      id: i,
+      arrival: v[0],
+      burst: v[1],
+      priority: v[2],
+      remaining: v[1],
+    }));
+    if (
+      p.some(
+        (x) =>
+          !Number.isInteger(x.arrival) ||
+          x.arrival < 0 ||
+          !Number.isInteger(x.burst) ||
+          x.burst < 1 ||
+          x.burst > 10000,
+      ) ||
+      p.reduce((s, x) => s + x.burst, 0) > 100000 ||
+      p.some((x) => x.arrival > 100000)
+    )
+      throw Error(
+        "Arrival must be an integer 0–100000; burst 1–10000; total burst ≤100000.",
+      );
+    if (!["FCFS", "SJF", "SRTF", "Priority", "Round Robin"].includes(policy))
+      throw Error("Unknown policy.");
+    if (!Number.isInteger(q) || q < 1)
+      throw Error("Quantum must be a positive integer.");
+    let time = 0,
+      done = 0,
+      timeline = [],
+      queue = [],
+      seen = new Set();
+    const append = (id, start, end) => {
+      let last = timeline.at(-1);
+      if (last && last.id === id && last.end === start) last.end = end;
+      else timeline.push({ id, start, end });
+    };
+    const arrivals = () =>
+      p
+        .filter((x) => x.arrival <= time && !seen.has(x.id))
+        .sort((a, b) => a.arrival - b.arrival || a.id - b.id)
+        .forEach((x) => {
+          seen.add(x.id);
+          queue.push(x);
+        });
+    while (done < p.length) {
+      let ready = p.filter((x) => x.arrival <= time && x.remaining > 0);
+      if (!ready.length) {
+        let next = Math.min(
+          ...p.filter((x) => x.remaining > 0).map((x) => x.arrival),
+        );
+        append(-1, time, next);
+        time = next;
+        continue;
+      }
+      let x;
+      if (policy === "Round Robin") {
+        arrivals();
+        x = queue.shift();
+      } else {
+        x = ready.sort((a, b) =>
+          policy === "FCFS"
+            ? a.arrival - b.arrival || a.id - b.id
+            : policy === "Priority"
+              ? a.priority - b.priority || a.arrival - b.arrival || a.id - b.id
+              : (policy === "SRTF"
+                  ? a.remaining - b.remaining
+                  : a.burst - b.burst) ||
+                a.arrival - b.arrival ||
+                a.id - b.id,
+        )[0];
+      }
+      if (x.start === undefined) x.start = time;
+      let duration =
+        policy === "SRTF"
+          ? 1
+          : policy === "Round Robin"
+            ? Math.min(q, x.remaining)
+            : x.remaining;
+      append(x.id, time, time + duration);
+      time += duration;
+      x.remaining -= duration;
+      if (policy === "Round Robin") {
+        arrivals();
+        if (x.remaining) queue.push(x);
+      }
+      if (!x.remaining) {
+        x.completion = time;
+        done++;
+      }
+    }
+    p.forEach((x) => {
+      x.turnaround = x.completion - x.arrival;
+      x.waiting = x.turnaround - x.burst;
+      x.response = x.start - x.arrival;
+    });
+    return {
+      processes: p,
+      timeline,
+      averageWaiting: p.reduce((s, x) => s + x.waiting, 0) / p.length,
+      averageTurnaround: p.reduce((s, x) => s + x.turnaround, 0) / p.length,
+      utilization: (100 * p.reduce((s, x) => s + x.burst, 0)) / time,
+    };
+  }
+  function banker(text) {
+    let d = JSON.parse(text),
+      { available: a, allocation: l, maximum: m } = d;
+    const valid = (v) =>
+      Array.isArray(v) &&
+      v.length > 0 &&
+      v.every((x) => Number.isSafeInteger(x) && x >= 0 && x <= 1000000);
+    if (
+      !valid(a) ||
+      a.length > 20 ||
+      !Array.isArray(l) ||
+      !Array.isArray(m) ||
+      l.length !== m.length ||
+      !l.length ||
+      l.length > 100 ||
+      l.some(
+        (v, i) =>
+          !valid(v) ||
+          !valid(m[i]) ||
+          v.length !== a.length ||
+          m[i].length !== a.length ||
+          v.some((x, j) => x > m[i][j]),
+      )
+    )
+      throw Error(
+        "Provide available and matching allocation/maximum matrices with nonnegative integers; allocation cannot exceed maximum.",
+      );
+    let need = m.map((v, i) => v.map((x, j) => x - l[i][j])),
+      work = [...a],
+      sequence = [],
+      steps = [],
+      finished = new Set();
+    while (true) {
+      let i = need.findIndex(
+        (v, i) => !finished.has(i) && v.every((x, j) => x <= work[j]),
+      );
+      if (i < 0) break;
+      let before = [...work];
+      work = work.map((x, j) => x + l[i][j]);
+      finished.add(i);
+      sequence.push(i);
+      steps.push({ process: i, before, after: [...work] });
+    }
+    return {
+      available: a,
+      allocation: l,
+      maximum: m,
+      need,
+      sequence,
+      steps,
+      safe: sequence.length === l.length,
+      blocked: need.map((_, i) => i).filter((i) => !finished.has(i)),
+    };
+  }
+  function polygons(text, point) {
+    let p = JSON.parse(text),
+      probe = point.split(",").map(Number);
+    if (probe.length !== 2 || !probe.every(finite))
+      throw Error("Probe requires two finite coordinates.");
+    if (
+      !Array.isArray(p) ||
+      !p.length ||
+      p.length > 50 ||
+      p.some(
+        (v) =>
+          !Array.isArray(v) ||
+          v.length < 3 ||
+          v.length > 200 ||
+          v.some(
+            (t) => !Array.isArray(t) || t.length !== 2 || !t.every(finite),
+          ),
+      )
+    )
+      throw Error("Enter up to 50 polygons, with 3–200 finite [x,y] vertices.");
+    const cross = (a, b, c) =>
+      (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    const on = (a, b, c) =>
+      Math.abs(cross(a, b, c)) < 1e-9 &&
+      c[0] >= Math.min(a[0], b[0]) - 1e-9 &&
+      c[0] <= Math.max(a[0], b[0]) + 1e-9 &&
+      c[1] >= Math.min(a[1], b[1]) - 1e-9 &&
+      c[1] <= Math.max(a[1], b[1]) + 1e-9;
+    const intersects = (a, b, c, d) =>
+      on(a, b, c) ||
+      on(a, b, d) ||
+      on(c, d, a) ||
+      on(c, d, b) ||
+      (cross(a, b, c) * cross(a, b, d) < 0 &&
+        cross(c, d, a) * cross(c, d, b) < 0);
+    let results = p.map((v) => {
+      for (let i = 0; i < v.length; i++)
+        for (let j = i + 1; j < v.length; j++) {
+          if (j === i + 1 || (i === 0 && j === v.length - 1)) continue;
+          if (
+            intersects(v[i], v[(i + 1) % v.length], v[j], v[(j + 1) % v.length])
+          )
+            throw Error(
+              "Self-intersecting polygons are unsupported; arrange vertices around the boundary.",
+            );
+        }
+      let signed = 0,
+        perimeter = 0,
+        inside = false,
+        boundary = false;
+      v.forEach((a, i) => {
+        let b = v[(i + 1) % v.length];
+        signed += a[0] * b[1] - b[0] * a[1];
+        perimeter += Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (on(a, b, probe)) boundary = true;
+        if (
+          a[1] > probe[1] !== b[1] > probe[1] &&
+          probe[0] < ((b[0] - a[0]) * (probe[1] - a[1])) / (b[1] - a[1]) + a[0]
+        )
+          inside = !inside;
+      });
+      if (Math.abs(signed) < 1e-9)
+        throw Error("Polygon area must be positive.");
+      return {
+        vertices: v.length,
+        area: Math.abs(signed) / 2,
+        perimeter,
+        winding: signed > 0 ? "Counterclockwise" : "Clockwise",
+        probe: boundary ? "Boundary" : inside ? "Inside" : "Outside",
+      };
+    });
+    return { polygons: p, results, point: probe };
+  }
+  function request(text, process, vector) {
+    let state = banker(text),
+      v = vector.split(/[ ,]+/).map(Number);
+    if (
+      !Number.isInteger(process) ||
+      process < 0 ||
+      process >= state.need.length ||
+      v.length !== state.available.length ||
+      v.some((x) => !Number.isSafeInteger(x) || x < 0)
+    )
+      throw Error(
+        "Request needs a valid process index and one nonnegative integer per resource.",
+      );
+    if (v.some((x, j) => x > state.need[process][j]))
+      throw Error("Request exceeds the declared remaining need.");
+    if (v.some((x, j) => x > state.available[j]))
+      return {
+        granted: false,
+        reason: "Insufficient available resources. The process must wait.",
+      };
+    let trial = JSON.parse(text);
+    trial.available = trial.available.map((x, j) => x - v[j]);
+    trial.allocation[process] = trial.allocation[process].map(
+      (x, j) => x + v[j],
+    );
+    let result = banker(JSON.stringify(trial));
+    return {
+      granted: result.safe,
+      reason: result.safe
+        ? "Request can be granted safely."
+        : "Request would create an unsafe state; allocation remains unchanged.",
+      result,
+    };
+  }
+  const api = { rectangles, schedule, banker, polygons, request };
+  if (typeof module !== "undefined") module.exports = api;
+  else root.Engine = api;
 })(globalThis);
-

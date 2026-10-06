@@ -1,13 +1,210 @@
-'use strict';
-const $=id=>document.getElementById(id),palette=['#58ddc1','#64a8ff','#b59aff','#ffba70','#ff82ab','#92dc75'];let report;
-document.querySelectorAll('textarea,input,select').forEach(el=>el.addEventListener('input',()=>report=undefined));
-const num=x=>typeof x==='number'?Number(x.toFixed(2)):x;
-const table=(headers,rows)=>'<table><thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
-const metrics=items=>{$('metrics').innerHTML=items.map(([v,k])=>`<div class="metric"><strong>${num(v)}</strong><span>${k}</span></div>`).join('');};
-function geometry(shapes,colors,probe){let pts=shapes.flat(),xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);if(probe){xs.push(probe[0]);ys.push(probe[1]);}let minx=Math.min(...xs),miny=Math.min(...ys),dx=Math.max(...xs)-minx||1,dy=Math.max(...ys)-miny||1,s=Math.min(650/dx,270/dy),xy=p=>[45+(p[0]-minx)*s,310-(p[1]-miny)*s];let body=shapes.map((v,i)=>`<polygon points="${v.map(xy).map(p=>p.join(',')).join(' ')}" fill="${palette[colors[i]%6]}33" stroke="${palette[colors[i]%6]}" stroke-width="2"/><text x="${xy(v[0])[0]+6}" y="${xy(v[0])[1]-6}" fill="white" font-size="14">${i+1}</text>`).join('');if(probe){let [x,y]=xy(probe);body+=`<circle cx="${x}" cy="${y}" r="5" fill="white"/>`;}return `<svg viewBox="0 0 750 350" role="img" aria-label="Geometry visualization; numbered shapes correspond to analysis rows">${body}</svg>`;}
-function run(){try{report=undefined;let r;if(PROJECT==='Rectangles'){r=Engine.rectangles($('data').value);metrics([[r.rectangles.length,'Rectangles'],[r.groups,'Non-overlapping groups'],[r.overlaps,'Overlap pairs']]);$('visual').innerHTML=geometry(r.rectangles.map(([x,y,w,h])=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]),r.colors);$('result').innerHTML=table(['Rectangle','Group','Bounds'],r.rectangles.map((v,i)=>[i+1,r.colors[i]+1,v.join(', ')]));$('steps').textContent='DSATUR chooses the uncolored rectangle with the most distinct neighbor colors, then assigns the first compatible group. Touching edges are allowed. This heuristic produces valid groups; it does not guarantee the minimum. Processing order: '+r.order.map(i=>i+1).join(' → ');}
-else if(PROJECT==='CPU-Scheduling'){r=Engine.schedule($('data').value,$('algorithm').value,Number($('quantum').value));metrics([[r.averageWaiting,'Average waiting'],[r.averageTurnaround,'Average turnaround'],[r.utilization,'CPU utilization %']]);let end=r.timeline.at(-1).end;$('visual').innerHTML=`<svg viewBox="0 0 750 150" role="img" aria-label="CPU timeline">${r.timeline.map(t=>{let x=20+710*t.start/end,w=710*(t.end-t.start)/end;return `<rect x="${x}" y="35" width="${w}" height="55" fill="${t.id<0?'#304056':palette[t.id%6]}"/><title>${t.id<0?'Idle':'P'+(t.id+1)}: ${t.start}–${t.end}</title>${w>25?`<text x="${x+3}" y="65" fill="#081525" font-size="12">${t.id<0?'Idle':'P'+(t.id+1)}</text>`:''}`;}).join('')}<text x="20" y="115" fill="white">0</text><text x="700" y="115" fill="white">${end}</text></svg>`;$('result').innerHTML=table(['Process','Completion','Waiting','Turnaround','Response'],r.processes.map(p=>['P'+(p.id+1),p.completion,p.waiting,p.turnaround,p.response]));$('steps').textContent=$('algorithm').value+' selected. SJF and Priority are nonpreemptive; SRTF reevaluates every time unit. Ties follow arrival then input order. Waiting = turnaround − burst; response = first start − arrival. Idle intervals are included.';}
-else if(PROJECT==='Banker-Algorithm-GUI'){r=Engine.banker($('data').value);metrics([[r.safe?'Safe':'Unsafe','Allocation state'],[r.sequence.length,'Processes can finish'],[r.available.length,'Resource types']]);$('visual').innerHTML='';$('result').innerHTML=table(['Process','Allocation','Maximum','Remaining need'],r.need.map((v,i)=>['P'+i,r.allocation[i].join(' / '),r.maximum[i].join(' / '),v.join(' / ')]));$('steps').innerHTML=r.steps.map(s=>`<div><b>P${s.process}</b> can finish with [${s.before}]. Released allocation → [${s.after}].</div>`).join('')+`<p>${r.safe?'Safe sequence: '+r.sequence.map(i=>'P'+i).join(' → '):'Blocked processes: '+r.blocked.map(i=>'P'+i).join(', ')+'. No guaranteed safe sequence exists; this does not establish that deadlock has already occurred.'}</p>`;}
-else{r=Engine.polygons($('data').value,$('point').value);metrics([[r.polygons.length,'Polygons'],[r.results.reduce((s,p)=>s+p.area,0),'Sum of areas'],[r.results.reduce((s,p)=>s+p.vertices,0),'Vertices']]);$('visual').innerHTML=geometry(r.polygons,r.polygons.map((_,i)=>i),r.point);$('result').innerHTML=table(['Polygon','Area','Perimeter','Winding','Probe'],r.results.map((p,i)=>[i+1,num(p.area),num(p.perimeter),p.winding,p.probe]));$('steps').textContent='Area uses the shoelace formula; perimeter sums edge lengths. Ray casting determines containment with explicit boundary detection. Simple polygons only; self intersections and zero area are rejected. Sum of areas counts overlapping regions separately.';}
-report={project:PROJECT,input:$('data').value,options:PROJECT==='CPU-Scheduling'?{policy:$('algorithm').value,quantum:Number($('quantum').value)}:PROJECT==='Polygons'?{point:$('point').value}:{},result:r};$('error').textContent='';}catch(e){$('error').textContent=e.message;$('metrics').innerHTML='';$('visual').innerHTML='';$('result').innerHTML='';$('steps').textContent='Fix the scenario input to continue.';}}
-$('run').onclick=run;$('reset').onclick=()=>{$('data').value=SAMPLE;run();};$('export').onclick=()=>{if(!report){$('error').textContent='Analyze a valid scenario before exporting.';return;}let url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=PROJECT+'-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('reset').click();
+"use strict";
+const $ = (id) => document.getElementById(id),
+  palette = ["#58ddc1", "#64a8ff", "#b59aff", "#ffba70", "#ff82ab", "#92dc75"];
+let report;
+document
+  .querySelectorAll("textarea,input,select")
+  .forEach((el) => el.addEventListener("input", () => (report = undefined)));
+const num = (x) => (typeof x === "number" ? Number(x.toFixed(2)) : x);
+const table = (headers, rows) =>
+  "<table><thead><tr>" +
+  headers.map((h) => `<th>${h}</th>`).join("") +
+  "</tr></thead><tbody>" +
+  rows
+    .map((r) => "<tr>" + r.map((c) => `<td>${c}</td>`).join("") + "</tr>")
+    .join("") +
+  "</tbody></table>";
+const metrics = (items) => {
+  $("metrics").innerHTML = items
+    .map(
+      ([v, k]) =>
+        `<div class="metric"><strong>${num(v)}</strong><span>${k}</span></div>`,
+    )
+    .join("");
+};
+function geometry(shapes, colors, probe) {
+  let pts = shapes.flat(),
+    xs = pts.map((p) => p[0]),
+    ys = pts.map((p) => p[1]);
+  if (probe) {
+    xs.push(probe[0]);
+    ys.push(probe[1]);
+  }
+  let minx = Math.min(...xs),
+    miny = Math.min(...ys),
+    dx = Math.max(...xs) - minx || 1,
+    dy = Math.max(...ys) - miny || 1,
+    s = Math.min(650 / dx, 270 / dy),
+    xy = (p) => [45 + (p[0] - minx) * s, 310 - (p[1] - miny) * s];
+  let body = shapes
+    .map(
+      (v, i) =>
+        `<polygon points="${v
+          .map(xy)
+          .map((p) => p.join(","))
+          .join(
+            " ",
+          )}" fill="${palette[colors[i] % 6]}33" stroke="${palette[colors[i] % 6]}" stroke-width="2"/><text x="${xy(v[0])[0] + 6}" y="${xy(v[0])[1] - 6}" fill="white" font-size="14">${i + 1}</text>`,
+    )
+    .join("");
+  if (probe) {
+    let [x, y] = xy(probe);
+    body += `<circle cx="${x}" cy="${y}" r="5" fill="white"/>`;
+  }
+  return `<svg viewBox="0 0 750 350" role="img" aria-label="Geometry visualization; numbered shapes correspond to analysis rows">${body}</svg>`;
+}
+function run() {
+  try {
+    report = undefined;
+    let r;
+    if (PROJECT === "Rectangles") {
+      r = Engine.rectangles($("data").value);
+      metrics([
+        [r.rectangles.length, "Rectangles"],
+        [r.groups, "Non-overlapping groups"],
+        [r.overlaps, "Overlap pairs"],
+      ]);
+      $("visual").innerHTML = geometry(
+        r.rectangles.map(([x, y, w, h]) => [
+          [x, y],
+          [x + w, y],
+          [x + w, y + h],
+          [x, y + h],
+        ]),
+        r.colors,
+      );
+      $("result").innerHTML = table(
+        ["Rectangle", "Group", "Bounds"],
+        r.rectangles.map((v, i) => [i + 1, r.colors[i] + 1, v.join(", ")]),
+      );
+      $("steps").textContent =
+        "DSATUR chooses the uncolored rectangle with the most distinct neighbor colors, then assigns the first compatible group. Touching edges are allowed. This heuristic produces valid groups; it does not guarantee the minimum. Processing order: " +
+        r.order.map((i) => i + 1).join(" → ");
+    } else if (PROJECT === "CPU-Scheduling") {
+      r = Engine.schedule(
+        $("data").value,
+        $("algorithm").value,
+        Number($("quantum").value),
+      );
+      metrics([
+        [r.averageWaiting, "Average waiting"],
+        [r.averageTurnaround, "Average turnaround"],
+        [r.utilization, "CPU utilization %"],
+      ]);
+      let end = r.timeline.at(-1).end;
+      $("visual").innerHTML =
+        `<svg viewBox="0 0 750 150" role="img" aria-label="CPU timeline">${r.timeline
+          .map((t) => {
+            let x = 20 + (710 * t.start) / end,
+              w = (710 * (t.end - t.start)) / end;
+            return `<rect x="${x}" y="35" width="${w}" height="55" fill="${t.id < 0 ? "#304056" : palette[t.id % 6]}"/><title>${t.id < 0 ? "Idle" : "P" + (t.id + 1)}: ${t.start}–${t.end}</title>${w > 25 ? `<text x="${x + 3}" y="65" fill="#081525" font-size="12">${t.id < 0 ? "Idle" : "P" + (t.id + 1)}</text>` : ""}`;
+          })
+          .join(
+            "",
+          )}<text x="20" y="115" fill="white">0</text><text x="700" y="115" fill="white">${end}</text></svg>`;
+      $("result").innerHTML = table(
+        ["Process", "Completion", "Waiting", "Turnaround", "Response"],
+        r.processes.map((p) => [
+          "P" + (p.id + 1),
+          p.completion,
+          p.waiting,
+          p.turnaround,
+          p.response,
+        ]),
+      );
+      $("steps").textContent =
+        $("algorithm").value +
+        " selected. SJF and Priority are nonpreemptive; SRTF reevaluates every time unit. Ties follow arrival then input order. Waiting = turnaround − burst; response = first start − arrival. Idle intervals are included.";
+    } else if (PROJECT === "Banker-Algorithm-GUI") {
+      r = Engine.banker($("data").value);
+      metrics([
+        [r.safe ? "Safe" : "Unsafe", "Allocation state"],
+        [r.sequence.length, "Processes can finish"],
+        [r.available.length, "Resource types"],
+      ]);
+      $("visual").innerHTML = "";
+      $("result").innerHTML = table(
+        ["Process", "Allocation", "Maximum", "Remaining need"],
+        r.need.map((v, i) => [
+          "P" + i,
+          r.allocation[i].join(" / "),
+          r.maximum[i].join(" / "),
+          v.join(" / "),
+        ]),
+      );
+      $("steps").innerHTML =
+        r.steps
+          .map(
+            (s) =>
+              `<div><b>P${s.process}</b> can finish with [${s.before}]. Released allocation → [${s.after}].</div>`,
+          )
+          .join("") +
+        `<p>${r.safe ? "Safe sequence: " + r.sequence.map((i) => "P" + i).join(" → ") : "Blocked processes: " + r.blocked.map((i) => "P" + i).join(", ") + ". No guaranteed safe sequence exists; this does not establish that deadlock has already occurred."}</p>`;
+    } else {
+      r = Engine.polygons($("data").value, $("point").value);
+      metrics([
+        [r.polygons.length, "Polygons"],
+        [r.results.reduce((s, p) => s + p.area, 0), "Sum of areas"],
+        [r.results.reduce((s, p) => s + p.vertices, 0), "Vertices"],
+      ]);
+      $("visual").innerHTML = geometry(
+        r.polygons,
+        r.polygons.map((_, i) => i),
+        r.point,
+      );
+      $("result").innerHTML = table(
+        ["Polygon", "Area", "Perimeter", "Winding", "Probe"],
+        r.results.map((p, i) => [
+          i + 1,
+          num(p.area),
+          num(p.perimeter),
+          p.winding,
+          p.probe,
+        ]),
+      );
+      $("steps").textContent =
+        "Area uses the shoelace formula; perimeter sums edge lengths. Ray casting determines containment with explicit boundary detection. Simple polygons only; self intersections and zero area are rejected. Sum of areas counts overlapping regions separately.";
+    }
+    report = {
+      project: PROJECT,
+      input: $("data").value,
+      options:
+        PROJECT === "CPU-Scheduling"
+          ? {
+              policy: $("algorithm").value,
+              quantum: Number($("quantum").value),
+            }
+          : PROJECT === "Polygons"
+            ? { point: $("point").value }
+            : {},
+      result: r,
+    };
+    $("error").textContent = "";
+  } catch (e) {
+    $("error").textContent = e.message;
+    $("metrics").innerHTML = "";
+    $("visual").innerHTML = "";
+    $("result").innerHTML = "";
+    $("steps").textContent = "Fix the scenario input to continue.";
+  }
+}
+$("run").onclick = run;
+$("reset").onclick = () => {
+  $("data").value = SAMPLE;
+  run();
+};
+$("export").onclick = () => {
+  if (!report) {
+    $("error").textContent = "Analyze a valid scenario before exporting.";
+    return;
+  }
+  let url = URL.createObjectURL(
+      new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }),
+    ),
+    a = document.createElement("a");
+  a.href = url;
+  a.download = PROJECT + "-analysis.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$("reset").click();
